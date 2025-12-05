@@ -6,8 +6,14 @@ class FlyleafWebPlayer {
         this.isPlaying = false;
         
         this.initializeElements();
+        this.initSubtitles();
         this.bindEvents();
         this.setupKeyboardShortcuts();
+    }
+
+    initSubtitles() {
+        this.subtitles = [];
+        this.currentSubtitleIndex = 0;
     }
 
     initializeElements() {
@@ -35,6 +41,7 @@ class FlyleafWebPlayer {
         this.shortcutsModal = document.getElementById('shortcutsModal');
         this.settingsBtn = document.getElementById('settingsBtn');
         this.closeShortcutsBtn = document.getElementById('closeShortcuts');
+        this.subtitleDisplay = document.getElementById('subtitleDisplay');
     }
 
     bindEvents() {
@@ -150,11 +157,17 @@ class FlyleafWebPlayer {
             file.type.startsWith('video/') || file.type.startsWith('audio/')
         );
         
-        if (mediaFiles.length === 0) {
-            this.showNotification('No valid media files found', 'error');
+        const subtitleFiles = Array.from(files).filter(file => {
+            const extension = file.name.split('.').pop().toLowerCase();
+            return ['srt', 'vtt', 'ass', 'ssa'].includes(extension);
+        });
+        
+        if (mediaFiles.length === 0 && subtitleFiles.length === 0) {
+            this.showNotification('No valid media or subtitle files found', 'error');
             return;
         }
 
+        // Handle media files
         mediaFiles.forEach(file => {
             const url = URL.createObjectURL(file);
             this.playlist.push({
@@ -166,7 +179,13 @@ class FlyleafWebPlayer {
             });
         });
 
-        this.updatePlaylistUI();
+        // Handle subtitle files
+        subtitleFiles.forEach(file => {
+            this.loadSubtitleFile(file);
+        });
+
+        if (mediaFiles.length > 0) {
+            this.updatePlaylistUI();
         
         if (this.playlist.length === mediaFiles.length) {
             // First files added, start playing the first one
@@ -201,6 +220,9 @@ class FlyleafWebPlayer {
         const progress = (this.video.currentTime / this.video.duration) * 100;
         this.progressBar.style.width = `${progress}%`;
         this.currentTimeDisplay.textContent = this.formatTime(this.video.currentTime);
+        
+        // Update subtitle display
+        this.updateSubtitleDisplay();
     }
 
     onVideoEnded() {
@@ -216,6 +238,146 @@ class FlyleafWebPlayer {
         this.showNotification('Error loading video file', 'error');
     }
 
+    updateSubtitleDisplay() {
+        if (!this.subtitles || this.subtitles.length === 0) return;
+        
+        const currentTime = this.video.currentTime;
+        const activeSubtitle = this.subtitles.find(sub => 
+            currentTime >= sub.start && currentTime <= sub.end
+        );
+        
+        if (activeSubtitle) {
+            this.subtitleDisplay.textContent = activeSubtitle.text;
+            this.subtitleDisplay.style.display = 'block';
+        } else {
+            this.subtitleDisplay.style.display = 'none';
+        }
+    }
+
+
+    loadSubtitleFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            const extension = file.name.split('.').pop().toLowerCase();
+            
+            try {
+                let parsedSubtitles = [];
+                
+                if (extension === 'srt') {
+                    parsedSubtitles = this.parseSRT(content);
+                } else if (extension === 'vtt') {
+                    parsedSubtitles = this.parseVTT(content);
+                } else if (extension === 'ass' || extension === 'ssa') {
+                    parsedSubtitles = this.parseASS(content);
+                }
+                
+                if (parsedSubtitles.length > 0) {
+                    this.subtitles = parsedSubtitles;
+                    this.showNotification(`Loaded ${parsedSubtitles.length} subtitle entries from ${file.name}`, 'success');
+                } else {
+                    this.showNotification(`No subtitles found in ${file.name}`, 'warning');
+                }
+            } catch (error) {
+                console.error('Subtitle parsing error:', error);
+                this.showNotification(`Error parsing subtitle file: ${file.name}`, 'error');
+            }
+        };
+        
+        reader.onerror = () => {
+            this.showNotification(`Error reading subtitle file: ${file.name}`, 'error');
+        };
+        
+        reader.readAsText(file);
+    }
+
+    parseSRT(content) {
+        const subtitles = [];
+        const blocks = content.trim().split(/\n\s*\n/);
+        
+        blocks.forEach(block => {
+            const lines = block.trim().split('\n');
+            if (lines.length >= 3) {
+                const timeMatch = lines[1].match(/(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})/);
+                if (timeMatch) {
+                    const start = this.timeToSeconds(timeMatch[1], timeMatch[2], timeMatch[3], timeMatch[4]);
+                    const end = this.timeToSeconds(timeMatch[5], timeMatch[6], timeMatch[7], timeMatch[8]);
+                    const text = lines.slice(2).join('\n').replace(/<[^>]*>/g, '');
+                    
+                    subtitles.push({ start, end, text });
+                }
+            }
+        });
+        
+        return subtitles;
+    }
+
+    parseVTT(content) {
+        const subtitles = [];
+        const lines = content.split('\n');
+        let i = 0;
+        
+        // Skip WEBVTT header
+        while (i < lines.length && !lines[i].includes('-->')) {
+            i++;
+        }
+        
+        while (i < lines.length) {
+            const line = lines[i].trim();
+            if (line.includes('-->')) {
+                const timeMatch = line.match(/(\d{2}):(\d{2}):(\d{2})\.(\d{3}) --> (\d{2}):(\d{2}):(\d{2})\.(\d{3})/);
+                if (timeMatch) {
+                    const start = this.timeToSeconds(timeMatch[1], timeMatch[2], timeMatch[3], timeMatch[4]);
+                    const end = this.timeToSeconds(timeMatch[5], timeMatch[6], timeMatch[7], timeMatch[8]);
+                    
+                    i++;
+                    let text = '';
+                    while (i < lines.length && lines[i].trim() !== '') {
+                        text += (text ? '\n' : '') + lines[i].trim();
+                        i++;
+                    }
+                    
+                    text = text.replace(/<[^>]*>/g, '');
+                    subtitles.push({ start, end, text });
+                }
+            }
+            i++;
+        }
+        
+        return subtitles;
+    }
+
+    parseASS(content) {
+        const subtitles = [];
+        const lines = content.split('\n');
+        
+        lines.forEach(line => {
+            if (line.startsWith('Dialogue:')) {
+                const parts = line.split(',');
+                if (parts.length >= 10) {
+                    const start = this.assTimeToSeconds(parts[1]);
+                    const end = this.assTimeToSeconds(parts[2]);
+                    const text = parts.slice(9).join(',').replace(/\\N/g, '\n').replace(/{[^}]*}/g, '');
+                    
+                    subtitles.push({ start, end, text });
+                }
+            }
+        });
+        
+        return subtitles;
+    }
+
+    timeToSeconds(hours, minutes, seconds, milliseconds) {
+        return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds) + parseInt(milliseconds) / 1000;
+    }
+
+    assTimeToSeconds(timeStr) {
+        const parts = timeStr.split(':');
+        if (parts.length === 3) {
+            return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+        }
+        return 0;
+    }
     togglePlayPause() {
         if (!this.video.src) return;
         
