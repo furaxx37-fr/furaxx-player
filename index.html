@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flyleaf Web Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { 
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .video-container {
+            background: radial-gradient(ellipse at center, #1e1e3f 0%, #0a0a1a 100%);
+            border: 2px solid #2d2d5f;
+            box-shadow: 0 0 30px rgba(45, 45, 95, 0.5);
+        }
+        .control-panel {
+            background: linear-gradient(180deg, rgba(20, 20, 40, 0.95) 0%, rgba(10, 10, 25, 0.98) 100%);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid #2d2d5f;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
+        }
+        .volume-slider::-webkit-slider-thumb {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        }
+        .file-drop-zone {
+            border: 2px dashed #4f46e5;
+            background: rgba(79, 70, 229, 0.1);
+            transition: all 0.3s ease;
+        }
+        .file-drop-zone.dragover {
+            border-color: #7c3aed;
+            background: rgba(124, 58, 237, 0.2);
+            transform: scale(1.02);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-white">
+    <!-- Header -->
+    <header class="bg-gray-900/80 backdrop-blur-sm border-b border-gray-700 p-4">
+        <div class="container mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <i class="fas fa-play-circle text-3xl text-indigo-500"></i>
+                <h1 class="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                    Flyleaf Web Player
+                </h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="fullscreenBtn" class="btn-primary px-4 py-2 rounded-lg">
+                    <i class="fas fa-expand mr-2"></i>Fullscreen
+                </button>
+                <button id="settingsBtn" class="text-gray-400 hover:text-white transition-colors">
+                    <i class="fas fa-cog text-xl"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto p-6">
+        <!-- Main Player Area -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Video Player -->
+            <div class="lg:col-span-3">
+                <div class="video-container rounded-xl overflow-hidden">
+                    <!-- File Drop Zone -->
+                    <div id="dropZone" class="file-drop-zone p-12 text-center rounded-xl mb-6">
+                        <i class="fas fa-cloud-upload-alt text-6xl text-indigo-400 mb-4"></i>
+                        <h3 class="text-xl font-semibold mb-2">Drop your media files here</h3>
+                        <p class="text-gray-400 mb-4">or click to browse</p>
+                        <input type="file" id="fileInput" class="hidden" accept="video/*,audio/*" multiple>
+                        <button id="browseBtn" class="btn-primary px-6 py-3 rounded-lg">
+                            <i class="fas fa-folder-open mr-2"></i>Browse Files
+                        </button>
+                    </div>
+
+                    <!-- Video Element -->
+                    <div id="videoWrapper" class="hidden">
+                        <video id="mainVideo" class="w-full h-auto" controls preload="metadata">
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>
+                </div>
+
+                <!-- Custom Controls -->
+                <div class="control-panel mt-4 p-4 rounded-xl">
+                    <div class="flex items-center justify-between mb-4">
+                        <!-- Playback Controls -->
+                        <div class="flex items-center space-x-3">
+                            <button id="prevBtn" class="text-gray-400 hover:text-white transition-colors">
+                                <i class="fas fa-step-backward text-xl"></i>
+                            </button>
+                            <button id="playPauseBtn" class="btn-primary w-12 h-12 rounded-full flex items-center justify-center">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <button id="nextBtn" class="text-gray-400 hover:text-white transition-colors">
+                                <i class="fas fa-step-forward text-xl"></i>
+                            </button>
+                            <button id="stopBtn" class="text-gray-400 hover:text-white transition-colors">
+                                <i class="fas fa-stop text-xl"></i>
+                            </button>
+                        </div>
+
+                        <!-- Time Display -->
+                        <div class="flex items-center space-x-2 text-sm">
+                            <span id="currentTime">00:00</span>
+                            <span class="text-gray-500">/</span>
+                            <span id="duration">00:00</span>
+                        </div>
+
+                        <!-- Volume & Speed Controls -->
+                        <div class="flex items-center space-x-4">
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-volume-up text-gray-400"></i>
+                                <input type="range" id="volumeSlider" class="volume-slider w-20" min="0" max="100" value="100">
+                            </div>
+                            <select id="speedSelect" class="bg-gray-800 text-white rounded px-2 py-1 text-sm">
+                                <option value="0.25">0.25x</option>
+                                <option value="0.5">0.5x</option>
+                                <option value="0.75">0.75x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.25">1.25x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="2">2x</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="relative">
+                        <div class="w-full bg-gray-700 rounded-full h-2 cursor-pointer" id="progressContainer">
+                            <div class="progress-bar h-2 rounded-full transition-all duration-300" id="progressBar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Playlist Sidebar -->
+            <div class="lg:col-span-1">
+                <div class="bg-gray-900/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-list mr-2 text-indigo-400"></i>Playlist
+                    </h3>
+                    <div id="playlist" class="space-y-2 max-h-96 overflow-y-auto">
+                        <div class="text-gray-500 text-center py-8">
+                            <i class="fas fa-music text-3xl mb-2"></i>
+                            <p>No files loaded</p>
+                        </div>
+                    </div>
+                    <button id="clearPlaylist" class="w-full mt-4 bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-colors">
+                        <i class="fas fa-trash mr-2"></i>Clear Playlist
+                    </button>
+                </div>
+
+                <!-- File Info -->
+                <div class="bg-gray-900/50 backdrop-blur-sm rounded-xl p-4 border border-gray-700 mt-4">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-info-circle mr-2 text-indigo-400"></i>File Info
+                    </h3>
+                    <div id="fileInfo" class="text-sm space-y-2">
+                        <div class="text-gray-500 text-center py-4">
+                            <i class="fas fa-file text-2xl mb-2"></i>
+                            <p>No file selected</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Help -->
+    <div id="shortcutsModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50">
+        <div class="bg-gray-900 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+            <h3 class="text-xl font-semibold mb-4">Keyboard Shortcuts</h3>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between"><span>Play/Pause</span><kbd class="bg-gray-700 px-2 py-1 rounded">Space</kbd></div>
+                <div class="flex justify-between"><span>Seek Forward</span><kbd class="bg-gray-700 px-2 py-1 rounded">→</kbd></div>
+                <div class="flex justify-between"><span>Seek Backward</span><kbd class="bg-gray-700 px-2 py-1 rounded">←</kbd></div>
+                <div class="flex justify-between"><span>Volume Up</span><kbd class="bg-gray-700 px-2 py-1 rounded">↑</kbd></div>
+                <div class="flex justify-between"><span>Volume Down</span><kbd class="bg-gray-700 px-2 py-1 rounded">↓</kbd></div>
+                <div class="flex justify-between"><span>Fullscreen</span><kbd class="bg-gray-700 px-2 py-1 rounded">F</kbd></div>
+                <div class="flex justify-between"><span>Mute</span><kbd class="bg-gray-700 px-2 py-1 rounded">M</kbd></div>
+            </div>
+            <button id="closeShortcuts" class="w-full mt-4 btn-primary px-4 py-2 rounded-lg">Close</button>
+        </div>
+    </div>
+
+    <script src="player.js"></script>
+</body>
+</html>
